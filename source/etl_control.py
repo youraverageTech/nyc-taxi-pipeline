@@ -3,7 +3,7 @@ import snowflake.connector
 
 
 class EtlControl:
-    def __init__(self, connection_params):
+    def __init__(self, connection_params: dict):
         self.connection_params = connection_params
 
 
@@ -11,17 +11,16 @@ class EtlControl:
         return snowflake.connector.connect(**self.connection_params)
     
     
-    def get_pending_months(self, expected_month):
+    def get_pending_months(self, expected_month: list):
         with self._get_connection() as conn:
-            cur = conn.cursor()
+            with conn.cursor() as cur:
+                cur.execute("""
+                    SELECT year_month
+                    FROM staging.etl_control
+                    WHERE status = 'loaded'
+                """)
 
-            cur.execute("""
-                SELECT year_month
-                FROM etl_control
-                WHERE status = 'loaded'
-            """)
-
-            loaded = {row[0] for row in cur.fetchall()}
+                loaded = {row[0] for row in cur.fetchall()}
         
         return [month for month in expected_month if month not in loaded]
     
@@ -40,7 +39,7 @@ class EtlControl:
         with self._get_connection() as conn:
             cur = conn.cursor()
             cur.execute(f"""
-                MERGE INTO etl_control AS target
+                MERGE INTO staging.etl_control AS target
                 USING (VALUES ({values_placeholder})) AS source ({columns_str})
                 ON target.year_month = source.year_month
                 WHEN MATCHED THEN
@@ -59,8 +58,8 @@ class EtlControl:
 
     
     def mark_downloaded(self, year_month, s3_raw_path):
-        return self._upsert(year_month, status="dowloaded", s3_raw_path=s3_raw_path, downloaded_at=datetime.now())
+        return self._upsert(year_month, status="downloaded", s3_raw_path=s3_raw_path, downloaded_at=datetime.now())
 
 
     def mark_failed(self, year_month, error_message):
-        return self._upsert(year_month, status="error", error_message=error_message)
+        return self._upsert(year_month, status="failed", error_message=error_message)
