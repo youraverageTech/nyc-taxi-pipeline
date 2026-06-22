@@ -10,8 +10,13 @@ class EtlControl:
     def _get_connection(self):
         return snowflake.connector.connect(**self.connection_params)
     
-    
-    def get_pending_months(self, expected_month: list):
+
+    def get_loaded_months(self) -> list:
+        """
+        Returns months that are already fully 'loaded' into Snowflake.
+        Use this to skip availability checks (e.g. HTTP HEAD requests)
+        against months that are already done end-to-end.
+        """
         with self._get_connection() as conn:
             with conn.cursor() as cur:
                 cur.execute("""
@@ -19,10 +24,36 @@ class EtlControl:
                     FROM staging.etl_control
                     WHERE status = 'loaded'
                 """)
+ 
+                return [row[0] for row in cur.fetchall()]
+    
+    
+    def get_months_needing_download(self, expected_month: list):
+        with self._get_connection() as conn:
+            with conn.cursor() as cur:
+                cur.execute("""
+                    SELECT year_month
+                    FROM staging.etl_control
+                    WHERE status IN ('downloaded', 'loaded')
+                """)
 
                 loaded = {row[0] for row in cur.fetchall()}
         
         return [month for month in expected_month if month not in loaded]
+    
+
+    def get_months_needing_load(self):
+        with self._get_connection() as conn:
+            with conn.cursor() as cur:
+                cur.execute("""
+                    SELECT year_month
+                    FROM staging.etl_control
+                    WHERE status = 'downloaded'
+                """)
+
+                loaded = {row[0] for row in cur.fetchall()}
+        
+        return loaded
     
 
     def _upsert(self, year_month: str, **fields):
