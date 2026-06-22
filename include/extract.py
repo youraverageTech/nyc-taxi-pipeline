@@ -1,18 +1,15 @@
 import requests
-from source.etl_control import EtlControl
+from include.etl_control import EtlControl
 from datetime import datetime
 import io
 import boto3
 
-BASE_URL = "https://d37ci6vzurychx.cloudfront.net/trip-data"
-params = {}
-BUCKET_NAME = "nyc-yellow-taxi-data-317871535186-ap-southeast-1-an"
-taxi_type = "yellow"
-year = datetime.now().year
 
-def get_available_months(year, taxi_type):
+
+def get_available_months(year, taxi_type, connection_provider, BASE_URL):
     available_months = []
-    already_loaded = set(EtlControl(params).get_loaded_months())
+    etl_control = EtlControl(connection_provider)
+    already_loaded = set(etl_control.get_loaded_months())
 
     for month in range(1, 13):
         month_str = f"{month:02d}"
@@ -33,8 +30,8 @@ def get_available_months(year, taxi_type):
     
     return available_months
 
-def extract_and_load_to_s3(available_months, taxi_type, year):
-    etl_control = EtlControl(params)
+def extract_and_load_to_s3(available_months, taxi_type, year, connection_provider, BUCKET_NAME, BASE_URL):
+    etl_control = EtlControl(connection_provider)
     s3_client = boto3.client("s3")
 
     months_need_to_download = etl_control.get_months_needing_download(available_months)
@@ -67,7 +64,3 @@ def extract_and_load_to_s3(available_months, taxi_type, year):
         except Exception as e:
             etl_control.mark_failed(year_month=year_month, error_message=str(e))
     
-
-if __name__ == "__main__":
-    months = get_available_months(year, taxi_type)
-    print(months)
