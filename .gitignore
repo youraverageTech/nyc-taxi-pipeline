@@ -3,3 +3,4 @@
 source/__pycache__/
 .env
 tests/__pychace__/
+.astro
