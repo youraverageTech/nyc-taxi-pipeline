@@ -46,14 +46,12 @@ class EtlControl:
         with self._get_connection() as conn:
             with conn.cursor() as cur:
                 cur.execute("""
-                    SELECT year_month
+                    SELECT year_month, s3_raw_path
                     FROM staging.etl_control
                     WHERE status = 'downloaded'
                 """)
 
-                loaded = {row[0] for row in cur.fetchall()}
-        
-        return loaded
+                return [(row[0], row[1]) for row in cur.fetchall()]
     
 
     def _upsert(self, year_month: str, **fields):
