@@ -2,6 +2,7 @@ import requests
 from source.etl_control import EtlControl
 from datetime import datetime
 import io
+import boto3
 
 BASE_URL = "https://d37ci6vzurychx.cloudfront.net/trip-data"
 params = {}
@@ -11,7 +12,7 @@ year = datetime.now().year
 
 def get_available_months(year, taxi_type):
     available_months = []
-    already_loaded = set(EtlControl(params).get_loaded_months)
+    already_loaded = set(EtlControl(params).get_loaded_months())
 
     for month in range(1, 13):
         month_str = f"{month:02d}"
