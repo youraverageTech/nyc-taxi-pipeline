@@ -1,6 +1,6 @@
 .venv
 .pytest_cache
-source/__pycache__/
+source/
 .env
 tests/__pychace__/
 .astro
