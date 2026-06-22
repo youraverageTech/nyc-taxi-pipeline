@@ -3,12 +3,12 @@ import snowflake.connector
 
 
 class EtlControl:
-    def __init__(self, connection_params: dict):
-        self.connection_params = connection_params
+    def __init__(self, connection_provider):
+        self._connection_provider = connection_provider
 
 
     def _get_connection(self):
-        return snowflake.connector.connect(**self.connection_params)
+        return self._connection_provider()
     
 
     def get_loaded_months(self) -> list:
