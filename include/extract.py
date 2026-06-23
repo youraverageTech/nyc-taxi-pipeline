@@ -35,6 +35,9 @@ def extract_and_load_to_s3(available_months, taxi_type, year, connection_provide
     s3_client = boto3.client("s3")
 
     months_need_to_download = etl_control.get_months_needing_download(available_months)
+
+    if not months_need_to_download:
+        return
     
     for year_month in months_need_to_download:
         dataset_url = f"{BASE_URL}/{taxi_type}_tripdata_{year_month}.parquet"

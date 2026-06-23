@@ -34,12 +34,12 @@ class EtlControl:
                 cur.execute("""
                     SELECT year_month
                     FROM staging.etl_control
-                    WHERE year_month NOT IN (SELECT year_month FROM etl_control WHERE downloaded_at IS NOT NULL)
+                    WHERE year_month IN (SELECT year_month FROM etl_control WHERE downloaded_at IS NOT NULL)
                 """)
 
-                loaded = {row[0] for row in cur.fetchall()}
+                downloaded = {row[0] for row in cur.fetchall()}
         
-        return [month for month in expected_month if month not in loaded]
+        return [month for month in expected_month if month not in downloaded]
     
 
     def get_months_needing_load(self):
@@ -64,18 +64,20 @@ class EtlControl:
         values_placeholder = ", ".join(["%s"] * len(values))
         update_str = ", ".join([f"target.{col} = source.{col}" for col in columns if col != "year_month"])
         insert_values = ", ".join([f"source.{col}" for col in columns])
-
-        with self._get_connection() as conn:
-            cur = conn.cursor()
-            cur.execute(f"""
-                MERGE INTO staging.etl_control AS target
-                USING (VALUES ({values_placeholder})) AS source ({columns_str})
-                ON target.year_month = source.year_month
-                WHEN MATCHED THEN
-                    UPDATE SET {update_str}
-                WHEN NOT MATCHED THEN
-                    INSERT ({columns_str}) VALUES ({insert_values})
-            """, values)
+        try:
+            with self._get_connection() as conn:
+                cur = conn.cursor()
+                cur.execute(f"""
+                    MERGE INTO staging.etl_control AS target
+                    USING (VALUES ({values_placeholder})) AS source ({columns_str})
+                    ON target.year_month = source.year_month
+                    WHEN MATCHED THEN
+                        UPDATE SET {update_str}
+                    WHEN NOT MATCHED THEN
+                        INSERT ({columns_str}) VALUES ({insert_values})
+                """, values)
+        except Exception as e:
+            print(f"Error: {e}")
 
 
     def mark_pending(self, year_month, source_url):
@@ -83,11 +85,11 @@ class EtlControl:
 
 
     def mark_loaded(self, year_month):
-        return self._upsert(year_month, status="loaded", loaded_at=datetime.now())
+        return self._upsert(year_month, status="loaded", loaded_at=datetime.now(), error_message=None)
 
     
     def mark_downloaded(self, year_month, s3_raw_path):
-        return self._upsert(year_month, status="downloaded", s3_raw_path=s3_raw_path, downloaded_at=datetime.now())
+        return self._upsert(year_month, status="downloaded", s3_raw_path=s3_raw_path, downloaded_at=datetime.now(), error_message=None)
 
 
     def mark_failed(self, year_month, error_message):
