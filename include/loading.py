@@ -1,4 +1,4 @@
-from source.etl_control import EtlControl
+from include.etl_control import EtlControl
 import snowflake.connector
 
 
