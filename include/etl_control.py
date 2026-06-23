@@ -34,7 +34,7 @@ class EtlControl:
                 cur.execute("""
                     SELECT year_month
                     FROM staging.etl_control
-                    WHERE status IN ('downloaded', 'loaded')
+                    WHERE year_month NOT IN (SELECT year_month FROM etl_control WHERE downloaded_at IS NOT NULL)
                 """)
 
                 loaded = {row[0] for row in cur.fetchall()}
@@ -48,7 +48,7 @@ class EtlControl:
                 cur.execute("""
                     SELECT year_month, s3_raw_path
                     FROM staging.etl_control
-                    WHERE status = 'downloaded'
+                    WHERE downloaded_at IS NOT NULL AND loaded_at IS NULL
                 """)
 
                 return [(row[0], row[1]) for row in cur.fetchall()]
