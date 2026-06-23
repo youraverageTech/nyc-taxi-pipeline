@@ -17,18 +17,18 @@ from source.etl_control import EtlControl
 
 @pytest.fixture
 def etl():
-    return EtlControl(connection_params={"account": "dummy", "user": "dummy", "password": "dummy"})
+    return EtlControl(connection_provider=lambda: MagicMock())
 
 
 def _mock_connection(mocker, fetchall_return):
     mock_cur = MagicMock()
     mock_cur.fetchall.return_value = fetchall_return
     mock_cur.__enter__.return_value = mock_cur
-
+ 
     mock_conn = MagicMock()
     mock_conn.cursor.return_value = mock_cur
     mock_conn.__enter__.return_value = mock_conn
-
+ 
     mocker.patch.object(EtlControl, "_get_connection", return_value=mock_conn)
     return mock_cur, mock_conn
 
@@ -43,6 +43,7 @@ class TestGetMonthsNeedingDownload:
 
         assert result == ["2024-01", "2024-02"]
 
+
     def test_downloaded_month_is_excluded(self, mocker, etl):
         """A month already at 'downloaded' status should NOT be re-downloaded,
         even though it hasn't reached 'loaded' yet."""
@@ -52,6 +53,7 @@ class TestGetMonthsNeedingDownload:
 
         assert result == ["2024-02"]
 
+
     def test_loaded_month_is_excluded(self, mocker, etl):
         """A month already 'loaded' should also not be re-downloaded."""
         _mock_connection(mocker, fetchall_return=[("2024-01",)])
@@ -59,6 +61,7 @@ class TestGetMonthsNeedingDownload:
         result = etl.get_months_needing_download(["2024-01", "2024-02"])
 
         assert result == ["2024-02"]
+
 
     def test_failed_month_still_needs_download(self, mocker, etl):
         """A month with status 'failed' (failed before a file ever reached S3)
@@ -71,6 +74,7 @@ class TestGetMonthsNeedingDownload:
 
         assert "2024-02" in result
 
+
     def test_query_filters_on_downloaded_and_loaded(self, mocker, etl):
         mock_cur, _ = _mock_connection(mocker, fetchall_return=[])
 
@@ -78,6 +82,7 @@ class TestGetMonthsNeedingDownload:
 
         sql = mock_cur.execute.call_args[0][0]
         assert "status IN ('downloaded', 'loaded')" in sql
+
 
     def test_empty_expected_months_returns_empty(self, mocker, etl):
         _mock_connection(mocker, fetchall_return=[("2024-01",)])
@@ -97,25 +102,32 @@ class TestGetMonthsNeedingLoad:
 
         assert result == []
 
+
     def test_returns_months_with_downloaded_status(self, mocker, etl):
         """Months sitting at 'downloaded' (file in S3, not yet in Snowflake)
         should be returned for the load step."""
-        _mock_connection(mocker, fetchall_return=[("2024-01",), ("2024-03",)])
+        _mock_connection(mocker, fetchall_return=[
+            ("2024-01", "raw/yellow/2024/yellow_tripdata_2024-01.parquet"),
+            ("2024-03", "raw/yellow/2024/yellow_tripdata_2024-03.parquet"),])
 
         result = etl.get_months_needing_load()
 
-        assert result == ["2024-01", "2024-03"]
+        assert result == [
+            ("2024-01", "raw/yellow/2024/yellow_tripdata_2024-01.parquet"),
+            ("2024-03", "raw/yellow/2024/yellow_tripdata_2024-03.parquet"),]
+
 
     def test_does_not_take_expected_months_argument(self, mocker, etl):
         """Unlike get_months_needing_download, this function doesn't need an
         expected_month list — it only cares about what's already in S3
         according to etl_control, not what 'should' exist overall."""
-        _mock_connection(mocker, fetchall_return=[("2024-01",)])
+        _mock_connection(mocker, fetchall_return=[("2024-01", "raw/yellow/2024/file.parquet")])
 
         # Should work with no arguments at all.
         result = etl.get_months_needing_load()
 
-        assert result == ["2024-01"]
+        assert result == [("2024-01", "raw/yellow/2024/file.parquet")]
+
 
     def test_query_filters_on_downloaded_only(self, mocker, etl):
         mock_cur, _ = _mock_connection(mocker, fetchall_return=[])
@@ -125,12 +137,24 @@ class TestGetMonthsNeedingLoad:
         sql = mock_cur.execute.call_args[0][0]
         assert "status = 'downloaded'" in sql
         assert "loaded'" not in sql.replace("status = 'downloaded'", "")
+    
+
+    def test_query_selects_s3_raw_path_column(self, mocker, etl):
+        """The SQL must select s3_raw_path alongside year_month, since the
+        load step needs it to construct the COPY INTO source."""
+        mock_cur, _ = _mock_connection(mocker, fetchall_return=[])
+ 
+        etl.get_months_needing_load()
+ 
+        sql = mock_cur.execute.call_args[0][0]
+        assert "s3_raw_path" in sql
 
 
 class TestDownloadAndLoadAreComplementary:
     """Integration-style tests (still mocked) verifying the two functions
     behave consistently with each other for the same underlying data,
     which matters since they're meant to be used together in sequence."""
+
 
     def test_month_failed_at_load_is_not_redownloaded_but_is_returned_for_load(self, mocker, etl):
         """
@@ -145,6 +169,6 @@ class TestDownloadAndLoadAreComplementary:
         assert download_result == []  # correctly skips re-download
 
         # Second call: load check — 2024-03 is still pending load.
-        _mock_connection(mocker, fetchall_return=[("2024-03",)])
+        _mock_connection(mocker, fetchall_return=[("2024-03", "raw/yellow/2024/yellow_tripdata_2024-03.parquet")])
         load_result = etl.get_months_needing_load()
-        assert load_result == ["2024-03"]  # correctly flagged for loading
+        assert load_result == [("2024-03", "raw/yellow/2024/yellow_tripdata_2024-03.parquet")]  # correctly flagged for loading
