@@ -1,8 +1,10 @@
-from airflow.decorators import dag, task
+from airflow.decorators import dag, task, task_group
 from datetime import datetime, timedelta
 from airflow.providers.snowflake.hooks.snowflake import SnowflakeHook
+from airflow.utils.trigger_rule import TriggerRule
 from dotenv import load_dotenv
 import os
+import subprocess
 
 load_dotenv()
 
@@ -14,6 +16,13 @@ def get_snowflake_connection():
         hook = SnowflakeHook(snowflake_conn_id="nyc_taxi_pipeline")
 
         return hook.get_conn()
+
+def run_dbt_command(command: list[str]):
+     subprocess.run(
+          command,
+          check=True,
+          cwd=""
+     )
 
 @dag(
     dag_id = "nyc_taxi_pipeline",
@@ -56,12 +65,31 @@ def nyc_taxi_pipeline():
         from include.loading import load_to_snowflake
 
         load_to_snowflake(connection_provider=get_snowflake_connection)
+
+    @task_group(group_id="running_dbt")
+    def running_dbt():
+         
+        @task.bash(trigger_rule=TriggerRule.NONE_FAILED_MIN_ONE_SUCCESS)
+        def dbt_seed():
+            return "cd /usr/local/airflow/dbt/nyc_taxi_dbt && dbt seed"
+         
+        @task.bash
+        def dbt_run():
+            return "cd /usr/local/airflow/dbt/nyc_taxi_dbt && dbt run"
+         
+        @task.bash
+        def dbt_test():
+            return "cd /usr/local/airflow/dbt/nyc_taxi_dbt && dbt test"
+        
+        dbt_seed() >> dbt_run() >> dbt_test()
+
     
     available_month = check_available_months()
     gate = has_new_data(available_month)
     extracted = extract_to_s3(available_month)
     loaded = load_to_s3()
+    
 
-    gate >> extracted >> loaded
+    gate >> extracted >> loaded >> running_dbt()
 
 nyc_taxi_pipeline()
