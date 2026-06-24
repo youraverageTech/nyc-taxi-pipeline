@@ -4,3 +4,4 @@ pyarrow
 boto3
 dotenv
 apache-airflow-providers-snowflake
+dbt-snowflake
