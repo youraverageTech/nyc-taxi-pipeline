@@ -7,10 +7,7 @@ config-version: 2
 models:
   nyc_taxi_dbt:
     staging:
-      +schema: staging_dbt
-      +materialized: view
-    intermediate:
-      +schema: intermediate
+      +schema: staging
       +materialized: view
     marts:
       +schema: marts
