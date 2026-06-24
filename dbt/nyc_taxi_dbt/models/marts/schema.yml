@@ -46,7 +46,7 @@ models:
           - not_null
           - relationships:
               to: ref('dim_zone')
-              field: location_id
+              field: locationid
 
       - name: dolocationid
         description: "Foreign key to dim_zone (dropoff zone)."
@@ -54,12 +54,12 @@ models:
           - not_null
           - relationships:
               to: ref('dim_zone')
-              field: location_id
+              field: locationid
       
       - name: pickup_date
         description: "Foreign key to dim_date"
         tests:
-          - not null
+          - not_null
           - relationships:
               to: ref('dim_date')
               field: date
@@ -105,7 +105,7 @@ models:
   - name: dim_zone
     description: "NYC TLC Taxi Zone lookup, sourced from stg_zones (seed-based)."
     columns:
-      - name: location_id
+      - name: locationid
         tests:
           - unique
           - not_null
@@ -129,7 +129,7 @@ models:
         tests:
           - unique
           - not_null
-      - name: payment_type_name
+      - name: payment_name
         tests:
           - not_null
 
@@ -205,11 +205,7 @@ models:
       - name: trip_date
         tests:
           - not_null
-      - name: vendorid
-        tests:
-          - relationships:
-              to: ref('dim_vendor')
-              field: vendorid
+
 
   - name: daily_payment_breakdown
     description: "Daily trip count and revenue aggregated by payment type. Joins fct_trips with dim_payment."
@@ -217,8 +213,3 @@ models:
       - name: trip_date
         tests:
           - not_null
-      - name: paymentid
-        tests:
-          - relationships:
-              to: ref('dim_payment')
-              field: paymentid

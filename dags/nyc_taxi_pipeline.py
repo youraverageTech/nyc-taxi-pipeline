@@ -17,13 +17,6 @@ def get_snowflake_connection():
 
         return hook.get_conn()
 
-def run_dbt_command(command: list[str]):
-     subprocess.run(
-          command,
-          check=True,
-          cwd=""
-     )
-
 @dag(
     dag_id = "nyc_taxi_pipeline",
     start_date = datetime(2026, 6, 1),
@@ -61,35 +54,39 @@ def nyc_taxi_pipeline():
                                BASE_URL=BASE_URL)
 
     @task
-    def load_to_s3():
+    def load_to_snowflake():
         from include.loading import load_to_snowflake
 
         load_to_snowflake(connection_provider=get_snowflake_connection)
 
-    @task_group(group_id="running_dbt")
-    def running_dbt():
+    @task_group(group_id="dbt_transform")
+    def dbt_transform():
+
+        @task.bash(trigger_rule=TriggerRule.ALL_DONE)
+        def dbt_deps():
+            return "cd /usr/local/airflow/dbt/nyc_taxi_dbt && dbt deps"
          
-        @task.bash(trigger_rule=TriggerRule.NONE_FAILED_MIN_ONE_SUCCESS)
+        @task.bash(trigger_rule=TriggerRule.ALL_DONE)
         def dbt_seed():
             return "cd /usr/local/airflow/dbt/nyc_taxi_dbt && dbt seed"
          
-        @task.bash
+        @task.bash(trigger_rule=TriggerRule.ALL_DONE)
         def dbt_run():
             return "cd /usr/local/airflow/dbt/nyc_taxi_dbt && dbt run"
          
-        @task.bash
+        @task.bash(trigger_rule=TriggerRule.ALL_DONE)
         def dbt_test():
             return "cd /usr/local/airflow/dbt/nyc_taxi_dbt && dbt test"
         
-        dbt_seed() >> dbt_run() >> dbt_test()
+        dbt_deps() >> dbt_seed() >> dbt_run() >> dbt_test()
 
     
     available_month = check_available_months()
     gate = has_new_data(available_month)
     extracted = extract_to_s3(available_month)
-    loaded = load_to_s3()
+    loaded = load_to_snowflake()
     
 
-    gate >> extracted >> loaded >> running_dbt()
+    gate >> extracted >> loaded >> dbt_transform()
 
 nyc_taxi_pipeline()

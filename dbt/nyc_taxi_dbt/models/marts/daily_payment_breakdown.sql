@@ -5,5 +5,5 @@ select
     , sum(total_amount) as total_revenue
 from {{ref('fct_trips')}} as f
 left join {{ref('dim_payment')}} as p 
-on f.payment_id = p.payment_id
+on f.paymentid = p.paymentid
 group by 1, 2

@@ -23,3 +23,4 @@ select
     , congestion_surcharge
     , cbd_congestion_fee
 from {{ref('stg_trips')}}
+where year(tpep_pickup_datetime) >= 2009

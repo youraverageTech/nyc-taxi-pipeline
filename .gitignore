@@ -2,6 +2,6 @@
 .pytest_cache
 source/
 .env
-tests/__pycache__
 .astro
-dags/__pycache__
+**/__pycache__/
+__pycache__/
