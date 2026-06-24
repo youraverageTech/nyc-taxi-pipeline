@@ -1,0 +1,14 @@
+name: 'nyc_taxi_dbt'
+profile: 'nyc_taxi_dbt'
+version: '1.0.0'
+config-version: 2
+
+
+models:
+  nyc_taxi_dbt:
+    staging:
+      +schema: staging
+      +materialized: view
+    marts:
+      +schema: marts
+      +materialized: table

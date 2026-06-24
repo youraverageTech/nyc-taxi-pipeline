@@ -1,0 +1,6 @@
+sources:
+  - name: raw
+    database: nyc_taxi
+    schema: staging
+    tables:
+      - name: raw_nyc_taxi_tripdata

@@ -1,0 +1,172 @@
+version: 2
+
+models:
+  - name: stg_trips
+    description: >
+      Cleaned NYC Yellow Taxi trip records, sourced from the raw landing
+      table. Rows with null core identifiers (vendor, pickup/dropoff
+      datetime, pickup/dropoff zone) or non-positive trip_distance are
+      filtered out. Fee-related columns are constrained to be non-negative.
+      payment_type is intentionally NOT filtered here, since codes 0
+      (Flex Fare), 5 (Unknown), and 6 (Voided trip) are valid business
+      states per the TLC data dictionary, not data quality issues.
+    columns:
+      - name: vendorid
+        description: "Code indicating the TPEP provider that provided the record (1=Creative Mobile Technologies, 2=VeriFone Inc)."
+        tests:
+          - not_null
+
+      - name: tpep_pickup_datetime
+        description: "Date and time when the meter was engaged."
+        tests:
+          - not_null
+
+      - name: tpep_dropoff_datetime
+        description: "Date and time when the meter was disengaged."
+        tests:
+          - not_null
+
+      - name: passenger_count
+        description: "Driver-entered number of passengers in the vehicle."
+        tests:
+          - dbt_utils.accepted_range:
+              min_value: 0
+              config:
+                severity: warn
+
+      - name: trip_distance
+        description: "Elapsed trip distance in miles reported by the taximeter."
+        tests:
+          - dbt_utils.accepted_range:
+              min_value: 0
+              inclusive: false
+
+      - name: ratecodeid
+        description: "Final rate code in effect at the end of the trip (1=Standard, 2=JFK, 3=Newark, 4=Nassau/Westchester, 5=Negotiated fare, 6=Group ride)."
+        tests:
+          - not_null
+
+      - name: store_and_fwd_flag
+        description: "Whether the trip record was held in vehicle memory before sending to the vendor (store and forward), converted to boolean (true = Y, false = N)."
+
+      - name: pulocationid
+        description: "TLC Taxi Zone in which the taximeter was engaged (pickup zone). Foreign key to stg_zones.location_id."
+        tests:
+          - not_null
+          - relationships:
+              to: ref('stg_zones')
+              field: location_id
+
+      - name: dolocationid
+        description: "TLC Taxi Zone in which the taximeter was disengaged (dropoff zone). Foreign key to stg_zones.location_id."
+        tests:
+          - not_null
+          - relationships:
+              to: ref('stg_zones')
+              field: location_id
+
+      - name: payment_type
+        description: >
+          Numeric code for how the passenger paid (0=Flex Fare, 1=Credit card,
+          2=Cash, 3=No charge, 4=Dispute, 5=Unknown, 6=Voided trip).
+          Intentionally not null-filtered upstream; all codes including
+          Unknown/Voided are kept as valid business states.
+        tests:
+          - dbt_utils.accepted_range:
+              min_value: 0
+              max_value: 6
+              config:
+                severity: warn
+
+      - name: fare_amount
+        description: "Time-and-distance fare calculated by the meter."
+        tests:
+          - dbt_utils.accepted_range:
+              min_value: 0
+
+      - name: extra
+        description: "Miscellaneous extras and surcharges (e.g. rush hour, overnight charges)."
+        tests:
+          - dbt_utils.accepted_range:
+              min_value: 0
+
+      - name: mta_tax
+        description: "MTA tax automatically triggered based on the metered rate in use."
+        tests:
+          - dbt_utils.accepted_range:
+              min_value: 0
+
+      - name: tip_amount
+        description: "Tip amount. Automatically populated for credit card tips; cash tips are not included."
+        tests:
+          - dbt_utils.accepted_range:
+              min_value: 0
+
+      - name: tolls_amount
+        description: "Total amount of all tolls paid in the trip."
+        tests:
+          - dbt_utils.accepted_range:
+              min_value: 0
+
+      - name: improvement_surcharge
+        description: "Improvement surcharge assessed on trips at the flag drop."
+
+      - name: total_amount
+        description: "Total amount charged to passengers. Does not include cash tips."
+        tests:
+          - dbt_utils.accepted_range:
+              min_value: 0
+
+      - name: congestion_surcharge
+        description: "Congestion surcharge amount collected for the trip."
+        tests:
+          - dbt_utils.accepted_range:
+              min_value: 0
+
+      - name: airport_fee
+        description: "Airport fee charged for trips originating at an airport."
+        tests:
+          - dbt_utils.accepted_range:
+              min_value: 0
+
+      - name: cbd_congestion_fee
+        description: "CBD congestion pricing fee (added to the schema starting with 2025 data)."
+        tests:
+          - dbt_utils.accepted_range:
+              min_value: 0
+
+      - name: year_month
+        description: "Year and month (YYYY-MM) this row's source file corresponds to, populated by the load step (not present in the raw Parquet)."
+        tests:
+          - not_null
+
+      - name: loaded_at
+        description: "Timestamp when this row was loaded into the raw table, populated by the load step."
+        tests:
+          - not_null
+
+  - name: stg_zones
+    description: >
+      Cleaned NYC TLC Taxi Zone Lookup reference table, sourced from a dbt
+      seed (static CSV from TLC, infrequently updated). Includes special
+      zones such as 264 (N/A) and 265 (Outside of NYC), which are kept as
+      valid lookup values rather than filtered out.
+    columns:
+      - name: location_id
+        description: "Unique identifier for a TLC taxi zone (1-263 for named zones, plus special values 264/265)."
+        tests:
+          - unique
+          - not_null
+
+      - name: borough
+        description: "NYC borough the zone belongs to (Manhattan, Brooklyn, Queens, Bronx, Staten Island, or special values like 'Unknown'/'N/A')."
+        tests:
+          - not_null
+
+      - name: zone
+        description: "Name of the taxi zone."
+        tests:
+          - not_null
+
+      - name: service_zone
+        description: "Service zone classification (e.g. Yellow Zone, Boro Zone, Airports)."

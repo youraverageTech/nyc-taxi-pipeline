@@ -1,0 +1,224 @@
+version: 2
+
+models:
+  # ============================================================
+  # FACT TABLE
+  # ============================================================
+  - name: fct_trips
+    description: >
+      Fact table for NYC Yellow Taxi trips. One row per trip. Contains
+      foreign keys to dim_vendor, dim_ratecode, dim_payment, and dim_zone
+      (via pickup_zone_id / dropoff_zone_id), plus measures (fare, tip,
+      distance, etc). store_and_fwd_flag and year_month are intentionally
+      excluded from this fact table.
+    columns:
+      - name: vendorid
+        description: "Foreign key to dim_vendor."
+        tests:
+          - not_null
+          - relationships:
+              to: ref('dim_vendor')
+              field: vendorid
+
+      - name: ratecodeid
+        description: "Foreign key to dim_ratecode."
+        tests:
+          - not_null
+          - relationships:
+              to: ref('dim_ratecode')
+              field: ratecodeid
+
+      - name: paymentid
+        description: "Foreign key to dim_payment."
+        tests:
+          - dbt_utils.accepted_range:
+              min_value: 0
+              max_value: 6
+              config:
+                severity: warn
+          - relationships:
+              to: ref('dim_payment')
+              field: paymentid
+
+      - name: pulocationid
+        description: "Foreign key to dim_zone (pickup zone)."
+        tests:
+          - not_null
+          - relationships:
+              to: ref('dim_zone')
+              field: location_id
+
+      - name: dolocationid
+        description: "Foreign key to dim_zone (dropoff zone)."
+        tests:
+          - not_null
+          - relationships:
+              to: ref('dim_zone')
+              field: location_id
+      
+      - name: pickup_date
+        description: "Foreign key to dim_date"
+        tests:
+          - not null
+          - relationships:
+              to: ref('dim_date')
+              field: date
+
+      - name: pickup_datetime
+        description: "Date and time when the meter was engaged."
+        tests:
+          - not_null
+
+      - name: dropoff_datetime
+        description: "Date and time when the meter was disengaged."
+        tests:
+          - not_null
+
+      - name: trip_distance
+        description: "Elapsed trip distance in miles."
+        tests:
+          - dbt_utils.accepted_range:
+              min_value: 0
+              inclusive: false
+
+      - name: passenger_count
+        description: "Driver-entered passenger count. May legitimately be 0 due to data entry behavior; monitored via warning, not filtered."
+        tests:
+          - dbt_utils.accepted_range:
+              min_value: 0
+              config:
+                severity: warn
+
+      - name: fare_amount
+        tests:
+          - dbt_utils.accepted_range:
+              min_value: 0
+
+      - name: total_amount
+        tests:
+          - dbt_utils.accepted_range:
+              min_value: 0
+
+  # ============================================================
+  # DIMENSION TABLES
+  # ============================================================
+  - name: dim_zone
+    description: "NYC TLC Taxi Zone lookup, sourced from stg_zones (seed-based)."
+    columns:
+      - name: location_id
+        tests:
+          - unique
+          - not_null
+      - name: borough
+        tests:
+          - not_null
+      - name: zone
+        tests:
+          - not_null
+      - name: service_zone
+
+  - name: dim_payment
+    description: >
+      Static, hardcoded lookup for payment_type codes per the TLC data
+      dictionary (0=Flex Fare, 1=Credit card, 2=Cash, 3=No charge,
+      4=Dispute, 5=Unknown, 6=Voided trip). Independent of fct_trips,
+      always contains all 7 official codes regardless of what appears
+      in the actual trip data.
+    columns:
+      - name: paymentid
+        tests:
+          - unique
+          - not_null
+      - name: payment_type_name
+        tests:
+          - not_null
+
+  - name: dim_ratecode
+    description: >
+      Static, hardcoded lookup for RatecodeID per the TLC data dictionary
+      (1=Standard, 2=JFK, 3=Newark, 4=Nassau/Westchester, 5=Negotiated,
+      6=Group ride, 99=Null/Unknown). Independent of fct_trips.
+    columns:
+      - name: ratecodeid
+        tests:
+          - unique
+          - not_null
+      - name: rate_code_name
+        tests:
+          - not_null
+
+  - name: dim_vendor
+    description: >
+      Static, hardcoded lookup for VendorID per the TLC data dictionary
+      (1=Creative Mobile Technologies, 2=Curb Mobility, 6=Myle Technologies,
+      7=Helix). Independent of fct_trips.
+    columns:
+      - name: vendorid
+        tests:
+          - unique
+          - not_null
+      - name: vendor_name
+        tests:
+          - not_null
+
+  - name: dim_date
+    description: "Date dimension generated via dbt_utils.date_spine, covering the full range of years processed by the pipeline."
+    columns:
+      - name: date
+        tests:
+          - unique
+          - not_null
+
+  # ============================================================
+  # AGGREGATE MARTS
+  # ============================================================
+  - name: daily_demand_by_zone
+    description: "Daily trip count and revenue aggregated by pickup zone/borough. Joins fct_trips with dim_zone."
+    columns:
+      - name: trip_date
+        tests:
+          - not_null
+      - name: total_trips
+        tests:
+          - dbt_utils.accepted_range:
+              min_value: 0
+
+  - name: hourly_demand
+    description: "Trip count aggregated by date and pickup hour, used to surface rush-hour demand patterns."
+    columns:
+      - name: trip_date
+        tests:
+          - not_null
+      - name: pickup_hour
+        tests:
+          - dbt_utils.accepted_range:
+              min_value: 0
+              max_value: 23
+      - name: total_trips
+        tests:
+          - dbt_utils.accepted_range:
+              min_value: 0
+
+  - name: daily_vendor_performance
+    description: "Daily trip count and revenue aggregated by vendor. Joins fct_trips with dim_vendor."
+    columns:
+      - name: trip_date
+        tests:
+          - not_null
+      - name: vendorid
+        tests:
+          - relationships:
+              to: ref('dim_vendor')
+              field: vendorid
+
+  - name: daily_payment_breakdown
+    description: "Daily trip count and revenue aggregated by payment type. Joins fct_trips with dim_payment."
+    columns:
+      - name: trip_date
+        tests:
+          - not_null
+      - name: paymentid
+        tests:
+          - relationships:
+              to: ref('dim_payment')
+              field: paymentid
