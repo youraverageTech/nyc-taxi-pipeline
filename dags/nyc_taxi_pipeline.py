@@ -6,6 +6,7 @@ from dotenv import load_dotenv
 import os
 import subprocess
 
+
 load_dotenv()
 
 BASE_URL = "https://d37ci6vzurychx.cloudfront.net/trip-data"
@@ -26,10 +27,11 @@ def get_snowflake_connection():
 def nyc_taxi_pipeline():
     
     @task
-    def check_available_months():
+    def check_available_months(**context):
         from include.extract import get_available_months
 
-        year = datetime.now().year
+        ds = context['ds']
+        year = int(ds.split("-")[0])
 
         available_month = get_available_months(year=year, taxi_type=TAXI_TYPE, 
                                                connection_provider=get_snowflake_connection, BASE_URL=BASE_URL)
@@ -41,10 +43,11 @@ def nyc_taxi_pipeline():
         return len(available_month) > 0
     
     @task
-    def extract_to_s3(available_month):
+    def extract_to_s3(available_month, **context):
         from include.extract import extract_and_load_to_s3
 
-        year = datetime.now().year
+        ds = context['ds']
+        year = int(ds.split("-")[0])
 
         extract_and_load_to_s3(available_months=available_month, 
                                taxi_type=TAXI_TYPE, 
