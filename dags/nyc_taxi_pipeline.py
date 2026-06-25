@@ -85,9 +85,6 @@ def nyc_taxi_pipeline():
     @task_group(group_id="dbt_transform")
     def dbt_transform():
 
-        logger.info("Starting transform dbt...")
-        start_date = datetime.now().hour
-
         @task.bash(trigger_rule=TriggerRule.ALL_DONE)
         def dbt_deps():
             return "cd /usr/local/airflow/dbt/nyc_taxi_dbt && dbt deps"
@@ -103,9 +100,7 @@ def nyc_taxi_pipeline():
         @task.bash(trigger_rule=TriggerRule.ALL_DONE)
         def dbt_test():
             return "cd /usr/local/airflow/dbt/nyc_taxi_dbt && dbt test"
-        
-        end_date = datetime.now().hour
-        logger.info(f"Finishing transform dbt. Execution time: {(end_date - start_date)}")
+
         
         dbt_deps() >> dbt_seed() >> dbt_run() >> dbt_test()
 
