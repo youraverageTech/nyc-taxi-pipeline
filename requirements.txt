@@ -5,3 +5,4 @@ boto3
 dotenv
 apache-airflow-providers-snowflake
 dbt-snowflake
+apache-airflow-providers-smtp
