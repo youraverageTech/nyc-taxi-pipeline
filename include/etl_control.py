@@ -29,6 +29,9 @@ class EtlControl:
     
     
     def get_months_needing_download(self, expected_month: list):
+        """
+        Returns months that need to download into S3 bucket from source website.
+        """
         with self._get_connection() as conn:
             with conn.cursor() as cur:
                 cur.execute("""
@@ -43,6 +46,9 @@ class EtlControl:
     
 
     def get_months_needing_load(self):
+        """
+        Returns months that need to load into snowflake raw table from S3 bucket.
+        """
         with self._get_connection() as conn:
             with conn.cursor() as cur:
                 cur.execute("""
@@ -55,6 +61,9 @@ class EtlControl:
     
 
     def _upsert(self, year_month: str, **fields):
+        """
+        This function is to update the state for idempotency.
+        """
         all_fields = {"year_month": year_month, **fields, "updated_at": datetime.now()}
 
         columns = list(all_fields.keys())

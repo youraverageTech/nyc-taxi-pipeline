@@ -11,6 +11,9 @@ logger = get_logger()
 
 
 def get_available_months(year, taxi_type, etl_control, base_url):
+    """
+    Returns list months from source website that need to download.
+    """
     available_months = []
     already_loaded = set(etl_control.get_loaded_months())
 
@@ -41,6 +44,9 @@ def get_available_months(year, taxi_type, etl_control, base_url):
 
 
 def _handle_failure(etl_control, year_month, error_message, counter):
+    """
+    handling failure in extract to s3 function. it will raise error if the process keep failed.
+    """
     etl_control.mark_failed(year_month=year_month, error_message=error_message)
     logger.warning(f"There was an error processing {year_month}: {error_message}")
     counter += 1
@@ -53,7 +59,10 @@ def _handle_failure(etl_control, year_month, error_message, counter):
 
 
 def extract_and_load_to_s3(available_months, taxi_type, year, etl_control, BUCKET_NAME, BASE_URL):
-
+    """
+    This function is to extract data from source website into S3. 
+    The extracting process is straight from website to S3 using IO. and the data is extracted by chunk to avoid placing an excessive load on the system.
+    """
     counter = 0
 
     s3_client = boto3.client("s3")

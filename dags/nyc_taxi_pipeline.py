@@ -30,6 +30,7 @@ def etl_control():
         return EtlControl(hook.get_conn)
 
 
+# create logs for dag failure
 def failure_callback(context):
     dag_id = context['dag'].dag_id
     task_id = context['task_instance'].task_id
@@ -37,6 +38,7 @@ def failure_callback(context):
     logger.error(f"Failure happened in DAG {dag_id}, task {task_id}")
 
 
+# adding retries and alert email notification if the pipeline failed
 default_args = {
     "retries": 3,
     "retry_delay": timedelta(minutes=3),
@@ -53,13 +55,13 @@ default_args = {
 @dag(
     dag_id = "nyc_taxi_pipeline",
     start_date = datetime(2026, 6, 1),
-    schedule = "@monthly",
+    schedule = "@monthly", 
     catchup = False,
     default_args = default_args
 )
 def nyc_taxi_pipeline():
 
-    
+    # checking the available months in source website.
     @task
     def check_available_months(**context):
         from include.extract import get_available_months
@@ -78,11 +80,13 @@ def nyc_taxi_pipeline():
         return available_month
     
 
+    # checking if there are months that available or not, if no skip the extract and loading process.
     @task.short_circuit(ignore_downstream_trigger_rules=False)
     def has_new_data(available_month):
         return len(available_month) > 0
 
 
+    # extracting data from website to S3 as raw landing zone
     @task
     def extract_to_s3(available_month, **context):
         from include.extract import extract_and_load_to_s3
@@ -102,6 +106,8 @@ def nyc_taxi_pipeline():
         end_date = time.time()
         logger.info(f"Finishing extract to S3. Execution time: {(end_date - start_date)}")
 
+
+    # loading the extracted data into snowflake raw table
     @task
     def load_to_snowflakes():
         from include.loading import load_to_snowflake
@@ -115,23 +121,24 @@ def nyc_taxi_pipeline():
         logger.info(f"Finishing load to Snowflake. Execution time: {(end_date - start_date)}")
 
 
+    # transform the data using dbt 
     @task_group(group_id="dbt_transform")
     def dbt_transform():
 
         @task.bash(trigger_rule=TriggerRule.NONE_FAILED)
-        def dbt_deps():
+        def dbt_deps(): # run dbt deps for dependency dbt_utils
             return "cd /usr/local/airflow/dbt/nyc_taxi_dbt && dbt deps"
          
         @task.bash(trigger_rule=TriggerRule.NONE_FAILED)
-        def dbt_seed():
+        def dbt_seed(): # run dbt seed for zone lookup data
             return "cd /usr/local/airflow/dbt/nyc_taxi_dbt && dbt seed"
          
         @task.bash(trigger_rule=TriggerRule.NONE_FAILED)
-        def dbt_run():
+        def dbt_run(): # run dbt run
             return "cd /usr/local/airflow/dbt/nyc_taxi_dbt && dbt run"
          
         @task.bash(trigger_rule=TriggerRule.NONE_FAILED)
-        def dbt_test():
+        def dbt_test(): # run dbt test
             return "cd /usr/local/airflow/dbt/nyc_taxi_dbt && dbt test"
 
         
