@@ -10,6 +10,9 @@ logger = get_logger()
 
 
 def load_to_snowflake(etl_control, stage_name="nyc_taxi_stage", target_table="staging.raw_nyc_taxi_tripdata"):
+    """
+    This function is to load the data from S3 into snowflake raw table using COPY INTO. with a handling failure if the process keep on failing.
+    """
     counter = 0
     months_to_load = etl_control.get_months_needing_load()
 
